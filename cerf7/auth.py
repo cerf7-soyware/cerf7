@@ -25,6 +25,7 @@ def login():
         .first_or_404(f"User with passphrase '{user_passphrase}' not found")
 
     session.clear()
+    session.permanent = True
     session["userId"] = user.userId
 
     return redirect(url_for("vk.messages"))
@@ -47,6 +48,7 @@ def signup():
             db.session.commit()
 
             session.clear()
+            session.permanent = True
             session["userId"] = user.userId
 
             return redirect(url_for("vk.messages"))
