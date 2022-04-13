@@ -30,7 +30,8 @@ MODEL_PATH_LENGTH = 200
 # noinspection PyUnresolvedReferences
 class User(db.Model):
     userId = db.Column(db.Integer, primary_key=True)
-    passphrase = db.Column(nullable=false, unique=True)
+    passphrase = db.Column(
+        db.String(DEFAULT_MODEL_STRING_LENGTH), nullable=False, unique=True)
 
     inGameState = relationship(
         "UserInGameState", uselist=False, lazy="select")
@@ -167,7 +168,8 @@ class ConversationMessage(db.Model):
     fromState = db.Column(db.Integer, primary_key=True)
     toState = db.Column(db.Integer, primary_key=True)
 
-    senderId = db.Column(db.Integer, nullable=True)
+    senderId = db.Column(
+        db.Integer, ForeignKey("character.characterId"), nullable=True)
     messageJson = db.Column(postgresql.JSONB, nullable=False)
 
     sender = relationship("Character", uselist=False, lazy="select")

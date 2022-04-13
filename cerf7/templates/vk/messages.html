@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Messages</title>
+</head>
+<body>
+    <form name="login" action="{{url_for('auth.login')}}" method="post">
+        <input type="text" name="passphrase" placeholder="passphrase" value="{{user_passphrase}}"/>
+        <input type="submit" value="Login with this passphrase"/>
+    </form>
+</body>
+</html>

@@ -4,6 +4,7 @@ from flask import (
 )
 
 from cerf7.auth import login_required
+from cerf7.db import db, User
 
 
 bp = Blueprint("vk", __name__)
@@ -12,4 +13,5 @@ bp = Blueprint("vk", __name__)
 @bp.route("/im")
 @login_required
 def messages():
-    return render_template("vk/messages.html")
+    user_passphrase = User.query.get(session["userId"]).passphrase
+    return render_template("vk/messages.html", user_passphrase=user_passphrase)
