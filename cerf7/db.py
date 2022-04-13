@@ -3,6 +3,7 @@ import click
 from enum import Enum, auto, unique
 from flask_sqlalchemy import SQLAlchemy
 from flask.cli import with_appcontext
+from sqlalchemy.dialects import postgresql
 
 db = SQLAlchemy()
 
@@ -38,7 +39,7 @@ class UserInGameState(db.Model):
     inGameDateTime = db.Column(db.DateTime, nullable=False)
     activeConversationId = db.Column(db.Integer, nullable=True)
     activeConversationState = db.Column(db.Integer, nullable=True)
-    datastore = db.Column(db.JSON, nullable=False, default="{}")
+    datastore = db.Column(postgresql.JSONB, nullable=False, default="{}")
     mainCharacterIsOnline = db.Column(db.Boolean, nullable=False, default=True)
 
 
@@ -73,7 +74,7 @@ class DialogMessage(db.Model):
     opponentId = db.Column(db.Integer, primary_key=True)
     messageId = db.Column(db.Integer, primary_key=True)
 
-    messageJson = db.Column(db.JSON, nullable=False)
+    messageJson = db.Column(postgresql.JSONB, nullable=False)
     sentDateTime = db.Column(db.DateTime, nullable=False)
     senderId = db.Column(db.Integer, nullable=False)
 
@@ -129,7 +130,7 @@ class ConversationMessage(db.Model):
     toState = db.Column(db.Integer, primary_key=True)
 
     senderId = db.Column(db.Integer, nullable=True)
-    messageJson = db.Column(db.JSON, nullable=False)
+    messageJson = db.Column(postgresql.JSONB, nullable=False)
 
 
 # noinspection PyUnresolvedReferences
