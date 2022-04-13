@@ -4,6 +4,8 @@ from enum import Enum, auto, unique
 from flask_sqlalchemy import SQLAlchemy
 from flask.cli import with_appcontext
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import ForeignKey
+from sqlalchemy.orm import relationship
 
 db = SQLAlchemy()
 
@@ -28,50 +30,72 @@ class User(db.Model):
     PASSPHRASE_HASH_LENGTH = 64  # Hexadecimal SHA-256 hash length
 
     userId = db.Column(db.Integer, primary_key=True)
-    passphraseHash = db.Column(db.String(PASSPHRASE_HASH_LENGTH),
-                               nullable=False)
+    passphraseHash = db.Column(
+        db.String(PASSPHRASE_HASH_LENGTH), nullable=False)
+
+    inGameState = relationship(
+        "UserInGameState", uselist=False, lazy="select")
+    availableConversations = relationship(
+        "AvailableConversation", lazy="select")
+    conversationAftermaths = relationship(
+        "ConversationAftermath", lazy="select")
+    scheduledEvents = relationship("ScheduledEvent", lazy="select")
+    messages = relationship("DialogMessage", lazy="select")
 
 
 # noinspection PyUnresolvedReferences
 class UserInGameState(db.Model):
-    userId = db.Column(db.Integer, primary_key=True)
+    userId = db.Column(db.Integer, ForeignKey("user.userId"), primary_key=True)
 
     inGameDateTime = db.Column(db.DateTime, nullable=False)
-    activeConversationId = db.Column(db.Integer, nullable=True)
+    activeConversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"))
     activeConversationState = db.Column(db.Integer, nullable=True)
     datastore = db.Column(postgresql.JSONB, nullable=False, default="{}")
     mainCharacterIsOnline = db.Column(db.Boolean, nullable=False, default=True)
 
+    activeConversation = relationship(
+        "Conversation", uselist=False, lazy="select")
+
 
 # noinspection PyUnresolvedReferences
 class AvailableConversation(db.Model):
-    userId = db.Column(db.Integer, primary_key=True)
-    conversationId = db.Column(db.Integer, primary_key=True)
+    userId = db.Column(db.Integer, ForeignKey("user.userId"), primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"), primary_key=True)
+
+    conversation = relationship("Conversation", uselist=False, lazy="select")
 
 
 # noinspection PyUnresolvedReferences
 class ConversationAftermath(db.Model):
-    userId = db.Column(db.Integer, primary_key=True)
-    conversationId = db.Column(db.Integer, primary_key=True)
-
+    userId = db.Column(db.Integer, ForeignKey("user.userId"), primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"), primary_key=True)
     endingState = db.Column(db.Integer, nullable=False)
 
 
 # noinspection PyUnresolvedReferences
 class ScheduledEvent(db.Model):
-    userId = db.Column(db.Integer, primary_key=True)
-    eventId = db.Column(db.Integer, primary_key=True)
-
+    userId = db.Column(db.Integer, ForeignKey("user.userId"), primary_key=True)
+    eventId = db.Column(
+       db.Integer, ForeignKey("event.eventId"), primary_key=True)
     publicationDateTime = db.Column(db.DateTime)
+
+    # There is no relationship `event` but only `eventType` because
+    # information about events of different types is stored in separate
+    # relations.
+    eventType = relationship("Event", uselist=False, lazy="select")
 
 
 # noinspection PyUnresolvedReferences
 class DialogMessage(db.Model):
-    # All messages generated as user plays are committed into this relation.
-    # This is required to support unique per-user plots.
+    # All messages that are generated as user plays are committed into this
+    # relation. This is required to support unique per-user plots.
 
-    userId = db.Column(db.Integer, primary_key=True)
-    opponentId = db.Column(db.Integer, primary_key=True)
+    userId = db.Column(db.Integer, ForeignKey("user.userId"), primary_key=True)
+    opponentId = db.Column(
+        db.Integer, ForeignKey("character.characterId"), primary_key=True)
     messageId = db.Column(db.Integer, primary_key=True)
 
     messageJson = db.Column(postgresql.JSONB, nullable=False)
@@ -80,6 +104,8 @@ class DialogMessage(db.Model):
 
     isRead = db.Column(db.Boolean, nullable=False)
     isEdited = db.Column(db.Boolean, nullable=False)
+
+    opponent = relationship("Character", uselist=False, lazy="select")
 
 
 ################################################################################
@@ -117,7 +143,8 @@ class CharacterProfileInfo(db.Model):
 # noinspection PyUnresolvedReferences
 class Conversation(db.Model):
     conversationId = db.Column(db.Integer, primary_key=True)
-    opponentId = db.Column(db.Integer, primary_key=True)
+
+    opponentId = db.Column(db.Integer, nullable=False)
 
     # Required conversations are those which push forward the plot.
     isRequired = db.Column(db.Boolean, nullable=False)
@@ -142,7 +169,7 @@ class ConversationTerminalState(db.Model):
 ################################################################################
 
 @unique
-class EventTypes(Enum):
+class EventType(Enum):
     ADD_CONVERSATION = auto()
     REMOVE_CONVERSATION = auto()
     MAIN_CHARACTER_OFFLINE = auto()
@@ -150,9 +177,9 @@ class EventTypes(Enum):
 
 
 # noinspection PyUnresolvedReferences
-class EventType(db.Model):
+class Event(db.Model):
     eventId = db.Column(db.Integer, primary_key=True)
-    eventType = db.Column(db.Enum(EventTypes), nullable=False)
+    eventType = db.Column(db.Enum(EventType), nullable=False)
 
 
 # noinspection PyUnresolvedReferences
