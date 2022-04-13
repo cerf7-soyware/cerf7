@@ -254,7 +254,7 @@ def init_db_command():
             "tables. Do you want to proceed?"
     ):
         init_db()
-        click.echo("Successfully initialized the database")
+        click.echo("Successfully initialized the database.")
 
 
 def init_app(app):
