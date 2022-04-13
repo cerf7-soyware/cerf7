@@ -1,5 +1,6 @@
 bidict==0.22.0
 click==8.1.2
+english-words==1.1.0
 Flask==2.1.1
 Flask-SocketIO==5.1.1
 Flask-SQLAlchemy==2.5.1
