@@ -35,4 +35,9 @@ def create_app(test_config=None):
     from cerf7 import socketio
     socketio.init_app(app)
 
+    from cerf7 import auth, api, vk
+    app.register_blueprint(auth.bp)
+    app.register_blueprint(api.bp)
+    app.register_blueprint(vk.bp)
+
     return app
