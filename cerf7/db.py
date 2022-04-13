@@ -7,7 +7,9 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKey
 from sqlalchemy.orm import relationship
 
+
 db = SQLAlchemy()
+
 
 # TODO: separate dynamically updated relations (e.g. per-user scheduled events
 #  queue) from static data (structures defining the plot). Creating two
@@ -127,13 +129,17 @@ class Character(db.Model):
     lastName = db.Column(db.String(DEFAULT_MODEL_STRING_LENGTH),
                          nullable=False)
 
+    profileInfo = relationship(
+        "CharacterProfileInfo", uselist=False, lazy="select")
+
 
 # noinspection PyUnresolvedReferences
 class CharacterProfileInfo(db.Model):
     # Here come VK-specific character attributes displayed in user profile,
     # e.g. interests, favourite quotes, attitude to smoking etc.
 
-    characterId = db.Column(db.Integer, primary_key=True)
+    characterId = db.Column(
+        db.Integer, ForeignKey("character.characterId"), primary_key=True)
 
     # TODO: add VK-specific attributes
 
@@ -143,30 +149,43 @@ class CharacterProfileInfo(db.Model):
 # noinspection PyUnresolvedReferences
 class Conversation(db.Model):
     conversationId = db.Column(db.Integer, primary_key=True)
-
-    opponentId = db.Column(db.Integer, nullable=False)
+    opponentId = db.Column(db.Integer, ForeignKey("character.characterId"))
 
     # Required conversations are those which push forward the plot.
     isRequired = db.Column(db.Boolean, nullable=False)
 
+    opponent = relationship("Character", uselist=False, lazy="select")
+    messages = relationship("ConversationMessage", lazy="select")
+    terminalStates = relationship("ConversationTerminalState", lazy="select")
+    aftermathDatastoreUpdates = relationship(
+        "AftermathDatastoreUpdate", lazy="select")
+    aftermathScheduling = relationship(
+        "AftermathScheduling", lazy="select")
+
 
 # noinspection PyUnresolvedReferences
 class ConversationMessage(db.Model):
-    conversationId = db.Column(db.Integer, primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation"), primary_key=True)
     fromState = db.Column(db.Integer, primary_key=True)
     toState = db.Column(db.Integer, primary_key=True)
 
     senderId = db.Column(db.Integer, nullable=True)
     messageJson = db.Column(postgresql.JSONB, nullable=False)
 
+    sender = relationship("Character", uselist=False, lazy="select")
+
 
 # noinspection PyUnresolvedReferences
 class ConversationTerminalState(db.Model):
-    conversationId = db.Column(db.Integer, primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"), primary_key=True)
     conversationState = db.Column(db.Integer, primary_key=True)
 
 
 ################################################################################
+
+# TODO: agree on complete event type list.
 
 @unique
 class EventType(Enum):
@@ -184,35 +203,43 @@ class Event(db.Model):
 
 # noinspection PyUnresolvedReferences
 class AddConversationEvent(db.Model):
-    eventId = db.Column(db.Integer, primary_key=True)
-    conversationId = db.Column(db.Integer, nullable=False)
+    eventId = db.Column(
+        db.Integer, ForeignKey("event.eventId"), primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"))
 
 
 # noinspection PyUnresolvedReferences
 class RemoveConversationEvent(db.Model):
-    eventId = db.Column(db.Integer, primary_key=True)
-    conversationId = db.Column(db.Integer, nullable=False)
+    eventId = db.Column(
+        db.Integer, ForeignKey("event.eventId"), primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"))
 
 
 ################################################################################
 
 # noinspection PyUnresolvedReferences
 class AftermathDatastoreUpdate(db.Model):
-    conversationId = db.Column(db.Integer, primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"), primary_key=True)
     endingState = db.Column(db.Integer, primary_key=True)
     updateExpression = db.Column(db.Text, nullable=False)
 
 
 # noinspection PyUnresolvedReferences
 class AftermathScheduling(db.Model):
-    conversationId = db.Column(db.Integer, primary_key=True)
+    conversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"), primary_key=True)
     endingState = db.Column(db.Integer, primary_key=True)
-    eventId = db.Column(db.Integer, nullable=False)
+    eventId = db.Column(db.Integer, ForeignKey("event.eventId"), nullable=False)
     eventDateTime = db.Column(db.Integer, nullable=False)
     datastorePredicate = db.Column(db.Text, nullable=False, default="True")
 
-################################################################################
+    event = relationship("Event", uselist=False, lazy="select")
 
+
+################################################################################
 
 def init_db():
     db.drop_all()
