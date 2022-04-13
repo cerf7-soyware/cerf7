@@ -5,6 +5,16 @@
     <title>Messages</title>
 </head>
 <body>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class=flashes>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
     <form name="login" action="{{url_for('auth.login')}}" method="post">
         <input type="text" name="passphrase" placeholder="passphrase" value="{{user_passphrase}}"/>
         <input type="submit" value="Login with this passphrase"/>

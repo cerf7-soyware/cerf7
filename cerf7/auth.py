@@ -2,7 +2,7 @@ import random
 
 from functools import wraps
 from flask import (
-    Blueprint, session, request, redirect, url_for, abort, current_app
+    Blueprint, session, request, redirect, url_for, abort, flash
 )
 from sqlalchemy.exc import IntegrityError
 from cerf7.english_words import english_words_lower_list
@@ -22,11 +22,14 @@ def login():
 
     user = User.query\
         .filter_by(passphrase=user_passphrase)\
-        .first_or_404(f"User with passphrase '{user_passphrase}' not found")
-
-    session.clear()
-    session.permanent = True
-    session["userId"] = user.userId
+        .first()
+    if user is None:
+        flash(f"User with passphrase '{user_passphrase}' not found")
+    else:
+        session.clear()
+        session.permanent = True
+        session["userId"] = user.userId
+        flash(f"Logged in with passphrase '{user_passphrase}'")
 
     return redirect(url_for("vk.messages"))
 
