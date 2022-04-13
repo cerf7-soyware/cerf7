@@ -250,8 +250,7 @@ def init_db():
 def init_db_command():
     if click.confirm(
             "This command fully removes existing database and recreates empty "
-            "tables. Do you want to proceed?"
-    ):
+            "tables. Do you want to proceed?"):
         init_db()
         click.echo("Successfully initialized the database.")
 
