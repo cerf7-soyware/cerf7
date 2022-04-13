@@ -16,7 +16,7 @@ db = SQLAlchemy()
 #  distinct databases for this purpose is considered.
 
 
-DEFAULT_MODEL_STRING_LENGTH = 20
+DEFAULT_MODEL_STRING_LENGTH = 50
 MODEL_PATH_LENGTH = 200
 
 
@@ -29,11 +29,8 @@ MODEL_PATH_LENGTH = 200
 
 # noinspection PyUnresolvedReferences
 class User(db.Model):
-    PASSPHRASE_HASH_LENGTH = 64  # Hexadecimal SHA-256 hash length
-
     userId = db.Column(db.Integer, primary_key=True)
-    passphraseHash = db.Column(
-        db.String(PASSPHRASE_HASH_LENGTH), nullable=False)
+    passphrase = db.Column(nullable=false, unique=True)
 
     inGameState = relationship(
         "UserInGameState", uselist=False, lazy="select")
