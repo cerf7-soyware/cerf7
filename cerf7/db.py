@@ -278,7 +278,7 @@ class InitialScheduling(db.Model):
     # Here are the events that need to be scheduled before the story starts.
     # E.g. the first conversation in the story needs to be scheduled from here.
     eventId = db.Column(db.Integer, ForeignKey("event.eventId"), nullable=False)
-    eventDateTime = db.Column(db.Integer, nullable=False)
+    eventDateTime = db.Column(db.DateTime, nullable=False)
 
 
 # noinspection PyUnresolvedReferences
