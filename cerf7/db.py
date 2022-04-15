@@ -15,6 +15,9 @@ db = SQLAlchemy()
 #  queue) from static data (structures defining the plot). Creating two
 #  distinct databases for this purpose is considered.
 
+# TODO: setup model inheritance to avoid code duplication between
+#  static/dynamic models.
+
 
 DEFAULT_MODEL_STRING_LENGTH = 50
 MODEL_PATH_LENGTH = 200
@@ -39,7 +42,9 @@ class User(db.Model):
         "AvailableConversation", lazy="select")
     conversationAftermaths = relationship(
         "ConversationAftermath", lazy="select")
-    scheduledEvents = relationship("ScheduledEvent", lazy="select")
+    scheduledEvents = relationship(
+        "ScheduledEvent", order_by="ScheduledEvent.eventDateTime",
+        lazy="select")
     messages = relationship("DialogMessage", lazy="select")
 
 
@@ -49,13 +54,21 @@ class UserInGameState(db.Model):
 
     inGameDateTime = db.Column(db.DateTime, nullable=False)
     activeConversationId = db.Column(
-        db.Integer, ForeignKey("conversation.conversationId"))
+        db.Integer, ForeignKey("conversation.conversationId"), nullable=True)
     activeConversationState = db.Column(db.Integer, nullable=True)
-    datastore = db.Column(postgresql.JSONB, nullable=False, default="{}")
-    mainCharacterIsOnline = db.Column(db.Boolean, nullable=False, default=True)
+    datastore = db.Column(postgresql.JSONB, nullable=False)
+    mainCharacterIsOnline = db.Column(db.Boolean, nullable=False, default=False)
 
     activeConversation = relationship(
         "Conversation", uselist=False, lazy="select")
+
+    def __init__(self, user_id, initial_state: "InitialUserInGameState"):
+        self.userId = user_id
+        self.inGameDateTime = initial_state.inGameDateTime
+        self.activeConversationId = initial_state.activeConversationId
+        self.activeConversationState = initial_state.activeConversationState
+        self.datastore = initial_state.datastore
+        self.mainCharacterIsOnline = initial_state.mainCharacterIsOnline
 
 
 # noinspection PyUnresolvedReferences
@@ -85,7 +98,7 @@ class ScheduledEvent(db.Model):
     # There is no relationship `event` but only `eventType` because
     # information about events of different types is stored in separate
     # relations.
-    eventType = relationship("Event", uselist=False, lazy="select")
+    event = relationship("Event", uselist=False, lazy="select")
 
 
 # noinspection PyUnresolvedReferences
@@ -110,6 +123,23 @@ class DialogMessage(db.Model):
 
 ################################################################################
 # Static data
+################################################################################
+
+# noinspection PyUnresolvedReferences
+class InitialUserInGameState(db.Model):
+    # For ep0, only one initial state of the game world exists.
+    # In further episodes, user might start from different initial states
+    # depending on the previous episode ending.
+    initialStateId = db.Column(db.Integer, primary_key=True)
+
+    inGameDateTime = db.Column(db.DateTime, nullable=False)
+    activeConversationId = db.Column(
+        db.Integer, ForeignKey("conversation.conversationId"), nullable=True)
+    activeConversationState = db.Column(db.Integer, nullable=True)
+    datastore = db.Column(postgresql.JSONB, nullable=False)
+    mainCharacterIsOnline = db.Column(db.Boolean, nullable=False, default=False)
+
+
 ################################################################################
 
 # noinspection PyUnresolvedReferences
@@ -145,11 +175,32 @@ class CharacterProfileInfo(db.Model):
 ################################################################################
 
 # noinspection PyUnresolvedReferences
+class PrePlotDialogMessage(db.Model):
+    # There are some messages that had been sent before the story began.
+    # These messages are the same for all users.
+
+    opponentId = db.Column(
+        db.Integer, ForeignKey("character.characterId"), primary_key=True)
+    messageId = db.Column(db.Integer, primary_key=True)
+
+    messageJson = db.Column(postgresql.JSONB, nullable=False)
+    sentDateTime = db.Column(db.DateTime, nullable=False)
+    senderId = db.Column(db.Integer, nullable=False)
+
+    isRead = db.Column(db.Boolean, nullable=False)
+    isEdited = db.Column(db.Boolean, nullable=False)
+
+    opponent = relationship("Character", uselist=False, lazy="select")
+
+
+################################################################################
+
+# noinspection PyUnresolvedReferences
 class Conversation(db.Model):
     conversationId = db.Column(db.Integer, primary_key=True)
     opponentId = db.Column(db.Integer, ForeignKey("character.characterId"))
 
-    # Required conversations are those which push forward the plot.
+    # Required conversations are those which push forward the plot
     isRequired = db.Column(db.Boolean, nullable=False)
 
     opponent = relationship("Character", uselist=False, lazy="select")
@@ -189,7 +240,7 @@ class ConversationTerminalState(db.Model):
 @unique
 class EventType(Enum):
     ADD_CONVERSATION = auto()
-    REMOVE_CONVERSATION = auto()
+    SCHEDULED_EVENT_EXPIRATION = auto()
     MAIN_CHARACTER_OFFLINE = auto()
     MAIN_CHARACTER_BACK_ONLINE = auto()
 
@@ -207,16 +258,26 @@ class AddConversationEvent(db.Model):
     conversationId = db.Column(
         db.Integer, ForeignKey("conversation.conversationId"))
 
+    conversation = relationship("Conversation", lazy="select")
+
 
 # noinspection PyUnresolvedReferences
-class RemoveConversationEvent(db.Model):
+class ScheduledEventExpiration(db.Model):
     eventId = db.Column(
         db.Integer, ForeignKey("event.eventId"), primary_key=True)
-    conversationId = db.Column(
-        db.Integer, ForeignKey("conversation.conversationId"))
+    expiredEventId = db.Column(
+        db.Integer, ForeignKey("event.eventId"))
 
 
 ################################################################################
+
+# noinspection PyUnresolvedReferences
+class InitialScheduling(db.Model):
+    # Here are the events that need to be scheduled before the story starts.
+    # E.g. the first conversation in the story needs to be scheduled from here.
+    eventId = db.Column(db.Integer, ForeignKey("event.eventId"), nullable=False)
+    eventDateTime = db.Column(db.Integer, nullable=False)
+
 
 # noinspection PyUnresolvedReferences
 class AftermathDatastoreUpdate(db.Model):

@@ -7,6 +7,7 @@ from flask import (
 from sqlalchemy.exc import IntegrityError
 from cerf7.english_words import english_words_lower_list
 from cerf7.db import db, User
+from cerf7.storyline import user_bootstrap
 
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -49,6 +50,8 @@ def signup():
             user = User(passphrase=user_passphrase)
             db.session.add(user)
             db.session.commit()
+
+            user_bootstrap()
 
             session.clear()
             session.permanent = True
