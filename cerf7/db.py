@@ -6,6 +6,7 @@ from flask.cli import with_appcontext
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.orderinglist import ordering_list
 
 
 db = SQLAlchemy()

@@ -51,11 +51,11 @@ def signup():
             db.session.add(user)
             db.session.commit()
 
-            user_bootstrap()
-
             session.clear()
             session.permanent = True
             session["userId"] = user.userId
+
+            user_bootstrap()
 
             return redirect(url_for("vk.messages"))
         except IntegrityError:

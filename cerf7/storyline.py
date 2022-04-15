@@ -33,13 +33,14 @@ def fastforward():
     user = User.query.get(session["userId"])
 
     # Shift time to the earliest scheduled event and dispatch it
-    scheduled_event = user.scheduledEvents.pop(0)
+    # scheduled_event = user.scheduledEvents.pop()
+    scheduled_event = user.scheduledEvents[0]
     dispatch_scheduled_event(scheduled_event)
 
     # Keep dispatching in-game events until main character is back online
     while not user.inGameState.mainCharacterIsOnline:
-        scheduled_event = user.scheduledEvents.pop(0)
-        dispatch_scheduled_event(scheduled_event.event)
+        scheduled_event = user.scheduledEvents[0]
+        dispatch_scheduled_event(scheduled_event)
 
 
 def dispatch_scheduled_event(scheduled_event: ScheduledEvent):
@@ -55,7 +56,7 @@ def dispatch_scheduled_event(scheduled_event: ScheduledEvent):
         user.inGameState.mainCharacterIsOnline = True
     elif event_type == EventType.ADD_CONVERSATION:
         event = AddConversationEvent.query.get(event_id)
-        conversation = event.converation
+        conversation = event.conversation
 
         # Not implemented
 
@@ -65,4 +66,5 @@ def dispatch_scheduled_event(scheduled_event: ScheduledEvent):
             (user.userId, event.expiredEventId))
         expired_event.delete()
 
+    db.session.delete(scheduled_event)
     db.session.commit()
