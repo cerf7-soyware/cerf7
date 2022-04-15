@@ -43,7 +43,7 @@ class User(db.Model):
     conversationAftermaths = relationship(
         "ConversationAftermath", lazy="select")
     scheduledEvents = relationship(
-        "ScheduledEvent", order_by="ScheduledEvent.eventDateTime",
+        "ScheduledEvent", order_by="ScheduledEvent.publicationDateTime",
         lazy="select")
     messages = relationship("DialogMessage", lazy="select")
 
@@ -273,6 +273,8 @@ class ScheduledEventExpiration(db.Model):
 
 # noinspection PyUnresolvedReferences
 class InitialScheduling(db.Model):
+    schedulingId = db.Column(db.Integer, primary_key=True)
+
     # Here are the events that need to be scheduled before the story starts.
     # E.g. the first conversation in the story needs to be scheduled from here.
     eventId = db.Column(db.Integer, ForeignKey("event.eventId"), nullable=False)
