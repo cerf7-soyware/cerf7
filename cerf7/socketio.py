@@ -1,5 +1,6 @@
-from flask import current_app, session
-from flask_socketio import SocketIO, emit, send
+from functools import wraps
+from flask import current_app, g, session
+from flask_socketio import SocketIO, emit, send, disconnect
 from cerf7.db import db, User
 
 
@@ -13,10 +14,12 @@ def handle_message(data):
 
 @socketio.on("connect")
 def handle_connection():
-    user_id = session["userId"]
-    user_passphrase = User.query.get(user_id).passphrase
+    if "userId" not in session:
+        disconnect()
 
-    send(f"Greetings! Your passphrase is {user_passphrase}")
+    g.user = User.query.get(session["userId"])
+
+    send(f"Greetings! Your passphrase is {g.user.passphrase}")
 
 
 def notify_about_available_conversation():

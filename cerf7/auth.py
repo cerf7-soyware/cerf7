@@ -2,7 +2,7 @@ import random
 
 from functools import wraps
 from flask import (
-    Blueprint, session, request, redirect, url_for, abort, flash
+    Blueprint, g, session, request, redirect, url_for, abort, flash
 )
 from sqlalchemy.exc import IntegrityError
 from cerf7.english_words import english_words_lower_list
@@ -47,19 +47,26 @@ def signup():
             user_passphrase = " ".join(random.choices(
                 english_words_lower_list, k=words_in_passphrase))
 
-            user = User(passphrase=user_passphrase)
-            db.session.add(user)
+            g.user = User(passphrase=user_passphrase)
+            db.session.add(g.user)
             db.session.commit()
 
             session.clear()
             session.permanent = True
-            session["userId"] = user.userId
+            session["userId"] = g.user.userId
 
             user_bootstrap()
 
             return redirect(url_for("vk.messages"))
         except IntegrityError:
             db.session.rollback()
+
+
+@bp.before_app_request
+def load_logged_in_user():
+    user_id = session.get("userId")
+    if user_id is not None:
+        g.user = User.query.get(user_id)
 
 
 def login_required(view):
