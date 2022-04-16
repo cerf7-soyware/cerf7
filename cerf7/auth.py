@@ -1,13 +1,13 @@
 import random
 
 from functools import wraps
-from flask import (
-    Blueprint, g, session, request, redirect, url_for, abort, flash
-)
 from sqlalchemy.exc import IntegrityError
 from cerf7.english_words import english_words_lower_list
 from cerf7.db import db, User
 from cerf7.storyline import user_bootstrap
+from flask import (
+    Blueprint, g, session, request, redirect, url_for, abort, flash
+)
 
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -73,9 +73,6 @@ def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
         if "user_id" not in session:
-            # If user is not logged in, automatically create for them
-            # an account since it's cheap AF (need to store user id & passphrase
-            # only).
             return redirect(url_for("auth.signup"))
 
         return view(*args, **kwargs)

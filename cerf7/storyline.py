@@ -1,9 +1,9 @@
 from flask import session, g
+from cerf7.socketio import notify_about_available_conversation
 from cerf7.db import (
     db, User, InitialUserInGameState, UserInGameState, InitialScheduling,
     ScheduledEvent, ScheduledEventExpiration, AddConversationEvent, EventType
 )
-from cerf7.socketio import notify_about_available_conversation
 
 
 def user_bootstrap():
@@ -38,7 +38,8 @@ def fastforward():
 
 
 def dispatch_scheduled_event(scheduled_event: ScheduledEvent):
-    g.user.in_game_state.in_game_date_time = scheduled_event.publication_date_time
+    g.user.in_game_state.in_game_date_time =\
+        scheduled_event.publication_date_time
 
     event_type = scheduled_event.event.event_type
     event_id = scheduled_event.event.event_id
@@ -47,11 +48,9 @@ def dispatch_scheduled_event(scheduled_event: ScheduledEvent):
     elif event_type == EventType.MAIN_CHARACTER_BACK_ONLINE:
         g.user.in_game_state.main_character_is_online = True
     elif event_type == EventType.ADD_CONVERSATION:
+        # TODO: Implement conversations.
         event = AddConversationEvent.query.get(event_id)
         conversation = event.conversation
-
-        # Not implemented
-
     elif event_type == EventType.SHEDULED_EVENT_EXPIRATION:
         event = ScheduledEventExpiration.get(event_id)
         expired_event = ScheduledEvent.query.get(

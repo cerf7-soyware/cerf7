@@ -11,11 +11,12 @@ from sqlalchemy.orm import relationship
 db = SQLAlchemy()
 
 
-# TODO: separate dynamically updated relations (e.g. per-user scheduled events
+# TODO: Separate dynamically updated relations (e.g. per-user scheduled events
 #  queue) from static data (structures defining the plot). Creating two
 #  distinct databases for this purpose is considered.
 
-# TODO: setup model inheritance to avoid code duplication between
+
+# TODO: Setup model inheritance to avoid code duplication between
 #  static/dynamic models.
 
 
@@ -174,7 +175,7 @@ class CharacterProfileInfo(db.Model):
     character_id = db.Column(
         db.Integer, ForeignKey("character.character_id"), primary_key=True)
 
-    # TODO: add VK-specific attributes
+    # TODO: Add VK-specific attributes.
 
 
 ################################################################################
@@ -231,13 +232,14 @@ class ConversationMessage(db.Model):
 # noinspection PyUnresolvedReferences
 class ConversationTerminalState(db.Model):
     conversation_id = db.Column(
-        db.Integer, ForeignKey("conversation.conversation_id"), primary_key=True)
+        db.Integer, ForeignKey("conversation.conversation_id"),
+        primary_key=True)
     conversation_state = db.Column(db.Integer, primary_key=True)
 
 
 ################################################################################
 
-# TODO: agree on complete event type list.
+# TODO: Agree on complete event type list.
 
 @unique
 class EventType(Enum):
