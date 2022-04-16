@@ -29,7 +29,7 @@ def login():
     else:
         session.clear()
         session.permanent = True
-        session["userId"] = user.userId
+        session["user_id"] = user.user_id
         flash(f"Logged in with passphrase '{user_passphrase}'")
 
     return redirect(url_for("vk.messages"))
@@ -53,7 +53,7 @@ def signup():
 
             session.clear()
             session.permanent = True
-            session["userId"] = g.user.userId
+            session["user_id"] = g.user.user_id
 
             user_bootstrap()
 
@@ -64,7 +64,7 @@ def signup():
 
 @bp.before_app_request
 def load_logged_in_user():
-    user_id = session.get("userId")
+    user_id = session.get("user_id")
     if user_id is not None:
         g.user = User.query.get(user_id)
 
@@ -72,7 +72,7 @@ def load_logged_in_user():
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
-        if "userId" not in session:
+        if "user_id" not in session:
             # If user is not logged in, automatically create for them
             # an account since it's cheap AF (need to store user id & passphrase
             # only).

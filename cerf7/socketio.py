@@ -14,10 +14,10 @@ def handle_message(data):
 
 @socketio.on("connect")
 def handle_connection():
-    if "userId" not in session:
+    if "user_id" not in session:
         disconnect()
 
-    g.user = User.query.get(session["userId"])
+    g.user = User.query.get(session["user_id"])
 
     send(f"Greetings! Your passphrase is {g.user.passphrase}")
 

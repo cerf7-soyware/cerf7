@@ -9,8 +9,8 @@ socket.on("connect", () => {
 });
 
 // Update dialog list and dialog messages.
-// Expected format: message = {opponentId: ..., messageJson: ...} where
-// `messageJson` defines message body.
+// Expected format: message = {opponent_id: ..., message_json: ...} where
+// `message_json` defines message body.
 socket.on("chat-message", onChatMessage);
 
 // Update cache of available user actions.
