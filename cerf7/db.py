@@ -1,10 +1,11 @@
 import click
 
+from dataclasses import dataclass
 from enum import Enum, auto, unique
 from flask_sqlalchemy import SQLAlchemy
 from flask.cli import with_appcontext
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import ForeignKey
+from sqlalchemy.schema import ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import relationship
 
 
@@ -38,8 +39,9 @@ class User(db.Model):
         db.String(DEFAULT_MODEL_STRING_LENGTH), nullable=False, unique=True)
 
     in_game_state = relationship("UserInGameState", uselist=False)
-    available_conversations = relationship("AvailableConversation")
+    available_messages = relationship("AvailableMessage")
     conversation_aftermath = relationship("ConversationAftermath")
+    conversation_state = relationship("ConversationState")
     messages = relationship("DialogMessage")
     scheduled_events = relationship(
         "ScheduledEvent", order_by="ScheduledEvent.publication_date_time")
@@ -51,7 +53,6 @@ class UserInGameState(db.Model):
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
 
     in_game_date_time = db.Column(db.DateTime, nullable=False)
-    active_conversation_state = db.Column(db.Integer, nullable=True)
     datastore = db.Column(postgresql.JSONB, nullable=False)
     main_character_is_online = db.Column(
         db.Boolean, nullable=False, default=False)
@@ -71,14 +72,37 @@ class UserInGameState(db.Model):
 
 
 # noinspection PyUnresolvedReferences
-class AvailableConversation(db.Model):
+class AvailableMessage(db.Model):
+    user_id = db.Column(
+        db.Integer, ForeignKey("user.user_id"), primary_key=True)
+    conversation_id = db.Column(db.Integer, nullable=False)
+    from_state = db.Column(db.Integer, nullable=False)
+    to_state = db.Column(db.Integer, nullable=False)
+
+    conversation_message = relationship("ConversationMessage", uselist=False)
+
+    __table_args__ = (ForeignKeyConstraint(
+        (conversation_id, from_state, to_state),
+        ("conversation_message.conversation_id",
+         "conversation_message.from_state",
+         "conversation_message.to_state")),)
+
+    def __init__(self, user: "User", message: "ConversationMessage"):
+        self.user_id = user.user_id
+        self.conversation_id = message.conversation_id
+        self.from_state = message.from_state
+        self.to_state = message.to_state
+
+
+# noinspection PyUnresolvedReferences
+class ConversationState(db.Model):
     user_id = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
     conversation_id = db.Column(
         db.Integer, ForeignKey("conversation.conversation_id"),
         primary_key=True)
 
-    conversation = relationship("Conversation", uselist=False)
+    conversation_state = db.Column(db.Integer, nullable=False, default=0)
 
 
 # noinspection PyUnresolvedReferences
@@ -108,23 +132,32 @@ class ScheduledEvent(db.Model):
 
 
 # noinspection PyUnresolvedReferences
+@dataclass
 class DialogMessage(db.Model):
     # All messages that are generated as user plays are committed into this
     # relation. This is required to support unique per-user plots.
 
-    user_id = db.Column(
+    user_id: int = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
-    opponent_id = db.Column(
+    opponent_id: int = db.Column(
         db.Integer, ForeignKey("character.character_id"), primary_key=True)
-    message_id = db.Column(db.Integer, primary_key=True)
+    message_id: int = db.Column(db.Integer, primary_key=True)
 
-    message_json = db.Column(postgresql.JSONB, nullable=False)
-    sent_date_time = db.Column(db.DateTime, nullable=False)
-    sender_id = db.Column(db.Integer, nullable=False)
-    is_read = db.Column(db.Boolean, nullable=False)
-    is_edited = db.Column(db.Boolean, nullable=False)
+    message_json: dict = db.Column(postgresql.JSONB, nullable=False)
+    sent_date_time: str = db.Column(db.DateTime, nullable=False)
+    sender_id: int = db.Column(db.Integer, nullable=False)
+    is_read: bool = db.Column(db.Boolean, nullable=False)
+    is_edited: bool = db.Column(db.Boolean, nullable=False)
 
     opponent = relationship("Character", uselist=False)
+
+    def __init__(
+            self, user: "User", conversation_message: "ConversationMessage"):
+        self.user_id = user.user_id
+        self.opponent_id = conversation_message.conversation.opponent_id
+        self.message_json = conversation_message.message_json
+        self.sent_date_time = user.in_game_state.in_game_date_time
+        self.sender_id = conversation_message.sender_id
 
 
 ################################################################################
@@ -210,31 +243,24 @@ class Conversation(db.Model):
 
     opponent = relationship("Character", uselist=False)
     messages = relationship("ConversationMessage")
-    terminal_states = relationship("ConversationTerminalState")
     aftermath_datastore_updates = relationship("AftermathDatastoreUpdate")
     aftermath_scheduling = relationship("AftermathScheduling")
 
 
 # noinspection PyUnresolvedReferences
+@dataclass
 class ConversationMessage(db.Model):
-    conversation_id = db.Column(
+    conversation_id: int = db.Column(
         db.Integer, ForeignKey("conversation"), primary_key=True)
-    from_state = db.Column(db.Integer, primary_key=True)
-    to_state = db.Column(db.Integer, primary_key=True)
+    from_state: int = db.Column(db.Integer, primary_key=True)
+    to_state: int = db.Column(db.Integer, primary_key=True)
 
-    message_json = db.Column(postgresql.JSONB, nullable=False)
-    sender_id = db.Column(
+    message_json: dict = db.Column(postgresql.JSONB, nullable=False)
+    sender_id: int = db.Column(
         db.Integer, ForeignKey("character.character_id"), nullable=True)
 
     sender = relationship("Character", uselist=False)
-
-
-# noinspection PyUnresolvedReferences
-class ConversationTerminalState(db.Model):
-    conversation_id = db.Column(
-        db.Integer, ForeignKey("conversation.conversation_id"),
-        primary_key=True)
-    conversation_state = db.Column(db.Integer, primary_key=True)
+    conversation = relationship("Conversation", uselist=False)
 
 
 ################################################################################

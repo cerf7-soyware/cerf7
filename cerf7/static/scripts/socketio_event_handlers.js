@@ -1,4 +1,4 @@
-function onChatMessage(message) {
+function onNpcMessage(message) {
     // Update cache of dialog list and dialog messages
     if (dialogsCache.dialogs === null) {
         dialogsCache.dialogs = [];
@@ -6,7 +6,7 @@ function onChatMessage(message) {
     dialogsCache.dialogs.append(message);
 }
 
-function onAvailableAction(action) {
+function onAvailableMessage(action) {
     // Update cache of available actions
     if (availableActionsCache.availableActions === null) {
         availableActionsCache.availableActions = [];

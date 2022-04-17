@@ -29,15 +29,17 @@ def create_app(test_config=None):
         app.logger.debug("/hello")
         return "Hello, Cerf7!"
 
-    from cerf7 import db
+    from cerf7 import db, socketio, real_time_scheduling
     db.init_app(app)
-
-    from cerf7 import socketio
     socketio.init_app(app)
+    real_time_scheduling.init_app(app)
 
     from cerf7 import auth, api, vk
     app.register_blueprint(auth.bp)
     app.register_blueprint(api.bp)
     app.register_blueprint(vk.bp)
+
+    from cerf7.real_time_scheduling import scheduler
+    scheduler.start()
 
     return app

@@ -1,7 +1,8 @@
-from functools import wraps
+from dataclasses import asdict
+
 from flask import current_app, g, session
 from flask_socketio import SocketIO, emit, send, disconnect
-from cerf7.db import db, User
+from cerf7.db import User, ConversationMessage, DialogMessage
 
 
 socketio = SocketIO()
@@ -18,12 +19,15 @@ def handle_connection():
         disconnect()
 
     g.user = User.query.get(session["user_id"])
-
     send(f"Greetings! Your passphrase is {g.user.passphrase}")
 
 
-def notify_about_available_conversation():
-    send("A new conversation is available!")
+def send_available_message(main_character_message: ConversationMessage):
+    emit("available-message", asdict(main_character_message))
+
+
+def send_npc_message(npc_message: DialogMessage):
+    emit("npc-message", asdict(npc_message))
 
 
 def init_app(app):
