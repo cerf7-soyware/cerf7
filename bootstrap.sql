@@ -17,9 +17,6 @@ VALUES (1, 0, 1, 1, '{"text": "Привет"}');
 INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_json)
 VALUES (1, 1, 2, NULL, '{"text": "Пока нахуй"}');
 
-INSERT INTO conversation_terminal_state (conversation_id, conversation_state)
-VALUES (1, 2);
-
 
 -- events
 
