@@ -1,5 +1,4 @@
 import datetime
-import json
 
 from flask import session, g
 from cerf7.socketio import send_available_message
@@ -60,7 +59,7 @@ def dispatch_scheduled_event(scheduled_event: ScheduledEvent):
     update_in_game_date_time(g.user, scheduled_event.publication_date_time)
 
     event_type = scheduled_event.event.event_type
-    event_id = scheduled_event.event.evet_id
+    event_id = scheduled_event.event.event_id
     if event_type == EventType.MAIN_CHARACTER_OFFLINE:
         g.user.in_game_state.main_character_is_online = False
     elif event_type == EventType.MAIN_CHARACTER_BACK_ONLINE:
@@ -88,7 +87,7 @@ def commit_conversation(conversation: Conversation):
 
 
 def update_conversation(conversation: Conversation):
-    conversation_state = get_conversation_state(conversation)
+    conversation_state = get_conversation_state(g.user, conversation)
     next_messages = ConversationMessage.query\
         .filter_by(
             conversation_id=conversation.conversation_id,
