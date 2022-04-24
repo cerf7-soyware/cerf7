@@ -9,15 +9,19 @@ socket.on("connect", () => {
 });
 
 // Update dialog list and dialog messages.
-// Expected format: message = {opponent_id: ..., message_json: ...} where
-// `message_json` defines message body.
+// Expected format: message = {opponent_id: ..., message_body: ...}.
 socket.on("npc-message", (message) => {
     console.log("NPC message: " + message);
-    onNpcMessage(message);
+    // onNpcMessage(message);
 });
 
 // Update cache of available user actions.
 socket.on("available-message", (message) => {
     console.log("Available message: " + message);
-    onAvailableMessage(message);
+    // onAvailableMessage(message);
+});
+
+// Log all messages for debugging purposes
+socket.on("message", (message) => {
+    console.log("General purpose message from server: " + message);
 });

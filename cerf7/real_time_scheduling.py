@@ -1,43 +1,49 @@
-import datetime
-
+from datetime import datetime, timedelta
+from typing import Callable, List
 from flask_apscheduler import APScheduler
-from flask import g
-from cerf7.db import db, ConversationMessage, User
-from cerf7.socketio import send_npc_message
-import cerf7.storyline as sl
+from cerf7.db import db, User
 
 
 scheduler = APScheduler()
 
 
-def schedule_npc_message(npc_message: ConversationMessage):
-    time_shift = sl.message_time_shift(npc_message)
-    irl_publication_datetime = datetime.datetime.now() + time_shift
-    in_game_publication_datetime = sl.in_game_date_time() + time_shift
-    user_id = g.user.user_id
+class RTSTask:
+    def __init__(
+            self, user: User, task_id: str, func: Callable[[], None],
+            defer_by: timedelta, referred_db_entities: List[db.Model] = None):
+        self.user = user
+        self.id = task_id
+        self.func = func
 
-    def publish_npc_message():
+        self.irl_publication_time = datetime.now() + defer_by
+        self.in_game_publication_time = \
+            user.in_game_state.in_game_date_time + defer_by
+
+        self.referred_db_entities = [] if referred_db_entities is None else \
+            referred_db_entities
+
+    def __call__(self, *args, **kwargs):
+        print("Hello from APScheduler!")
         with scheduler.app.app_context():
-            print("From APScheduler")
+            self._refresh_db_entities()
+            self._update_in_game_datetime()
+            self.func()
 
-            user = User.query.get(user_id)
+    def _refresh_db_entities(self):
+        db.session.add(self.user)
+        for entity in self.referred_db_entities:
+            db.session.add(entity)
 
-            print("Got user")
+    def _update_in_game_datetime(self):
+        self.user.in_game_state.in_game_date_time = \
+            self.in_game_publication_time
+        db.session.flush()
 
-            message_instance = sl.commit_message(user, npc_message)
-            sl.update_in_game_date_time(user, in_game_publication_datetime)
-            conversation_state = sl.get_conversation_state(
-                user, npc_message.conversation)
-            conversation_state.conversation_state = npc_message.to_state
 
-            db.session.commit()
-
-            send_npc_message(message_instance)
-            sl.update_conversation(npc_message.conversation)
-
+def schedule_task(task: RTSTask):
     scheduler.add_job(
-        id="npc-message", func=publish_npc_message, trigger="date",
-        run_date=irl_publication_datetime)
+        task.id, func=lambda: task(), trigger="date",
+        run_date=task.irl_publication_time)
 
 
 def init_app(app):

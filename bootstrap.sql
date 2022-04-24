@@ -11,11 +11,21 @@ VALUES ('2018-12-20', '{}', FALSE);
 INSERT INTO conversation (opponent_id, is_required)
 VALUES (1, TRUE);
 
-INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_json)
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
 VALUES (1, 0, 1, 1, '{"text": "Привет"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 1, 2, 1, '{"text": "Я тут короче хуярю сок маракуйи"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 2, 3, 1, '{"text": "Ебейшая штука как понимаешь"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 3, 4, 1, '{"text": "Довольно плотная"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 4, 5, 1, '{"text": "Как плотность мысли этого диалога"}');
 
-INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_json)
-VALUES (1, 1, 2, NULL, '{"text": "Пока нахуй"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 5, 6, NULL, '{"text": "Пока нахуй"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 5, 7, NULL, '{"text": "Глубоко"}');
 
 
 -- events

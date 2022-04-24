@@ -1,5 +1,7 @@
 import click
+import json
 
+from functools import partial
 from dataclasses import dataclass
 from enum import Enum, auto, unique
 from flask_sqlalchemy import SQLAlchemy
@@ -8,9 +10,9 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import relationship
 
-
-db = SQLAlchemy()
-
+db = SQLAlchemy(
+    engine_options={
+        "json_serializer": partial(json.dumps, ensure_ascii=False)})
 
 # TODO: Separate dynamically updated relations (e.g. per-user scheduled events
 #  queue) from static data (structures defining the plot). Creating two
@@ -34,9 +36,12 @@ MODEL_PATH_LENGTH = 200
 
 # noinspection PyUnresolvedReferences
 class User(db.Model):
+    SID_LENGTH = 20
+
     user_id = db.Column(db.Integer, primary_key=True)
     passphrase = db.Column(
         db.String(DEFAULT_MODEL_STRING_LENGTH), nullable=False, unique=True)
+    current_sid = db.Column(db.String(SID_LENGTH), nullable=True, unique=True)
 
     in_game_state = relationship("UserInGameState", uselist=False)
     available_messages = relationship("AvailableMessage")
@@ -45,6 +50,25 @@ class User(db.Model):
     messages = relationship("DialogMessage")
     scheduled_events = relationship(
         "ScheduledEvent", order_by="ScheduledEvent.publication_date_time")
+
+    def commit_new_conversation(self, conversation: "Conversation") -> None:
+        conversation_state = ConversationState(
+            user_id=self.user_id,
+            conversation_id=conversation.conversation_id)
+        db.session.add(conversation_state)
+        db.session.commit()
+
+    def commit_message(self, message: "ConversationMessage") -> "DialogMessage":
+        message_instance = DialogMessage(self, message)
+        db.session.add(message_instance)
+        db.session.commit()
+
+        return message_instance
+
+    def commit_available_message(self, message: "ConversationMessage") -> None:
+        available_message = AvailableMessage(self, message)
+        db.session.add(available_message)
+        db.session.commit()
 
 
 # noinspection PyUnresolvedReferences
@@ -75,9 +99,9 @@ class UserInGameState(db.Model):
 class AvailableMessage(db.Model):
     user_id = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
-    conversation_id = db.Column(db.Integer, nullable=False)
-    from_state = db.Column(db.Integer, nullable=False)
-    to_state = db.Column(db.Integer, nullable=False)
+    conversation_id = db.Column(db.Integer, primary_key=True)
+    from_state = db.Column(db.Integer, primary_key=True)
+    to_state = db.Column(db.Integer, primary_key=True)
 
     conversation_message = relationship("ConversationMessage", uselist=False)
 
@@ -121,7 +145,7 @@ class ScheduledEvent(db.Model):
     user_id = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
     event_id = db.Column(
-       db.Integer, ForeignKey("event.event_id"), primary_key=True)
+        db.Integer, ForeignKey("event.event_id"), primary_key=True)
 
     publication_date_time = db.Column(db.DateTime)
 
@@ -141,13 +165,14 @@ class DialogMessage(db.Model):
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
     opponent_id: int = db.Column(
         db.Integer, ForeignKey("character.character_id"), primary_key=True)
-    message_id: int = db.Column(db.Integer, primary_key=True)
+    message_id: int = db.Column(
+        db.Integer, primary_key=True, autoincrement=True)
 
-    message_json: dict = db.Column(postgresql.JSONB, nullable=False)
+    message_body: dict = db.Column(postgresql.JSONB, nullable=False)
     sent_date_time: str = db.Column(db.DateTime, nullable=False)
     sender_id: int = db.Column(db.Integer, nullable=False)
-    is_read: bool = db.Column(db.Boolean, nullable=False)
-    is_edited: bool = db.Column(db.Boolean, nullable=False)
+    is_read: bool = db.Column(db.Boolean, nullable=False, default=False)
+    is_edited: bool = db.Column(db.Boolean, nullable=False, default=False)
 
     opponent = relationship("Character", uselist=False)
 
@@ -155,7 +180,7 @@ class DialogMessage(db.Model):
             self, user: "User", conversation_message: "ConversationMessage"):
         self.user_id = user.user_id
         self.opponent_id = conversation_message.conversation.opponent_id
-        self.message_json = conversation_message.message_json
+        self.message_body = conversation_message.message_body
         self.sent_date_time = user.in_game_state.in_game_date_time
         self.sender_id = conversation_message.sender_id
 
@@ -222,7 +247,7 @@ class PrePlotDialogMessage(db.Model):
         db.Integer, ForeignKey("character.character_id"), primary_key=True)
     message_id = db.Column(db.Integer, primary_key=True)
 
-    message_json = db.Column(postgresql.JSONB, nullable=False)
+    message_body = db.Column(postgresql.JSONB, nullable=False)
     sent_date_time = db.Column(db.DateTime, nullable=False)
     sender_id = db.Column(db.Integer, nullable=False)
     is_read = db.Column(db.Boolean, nullable=False)
@@ -255,7 +280,7 @@ class ConversationMessage(db.Model):
     from_state: int = db.Column(db.Integer, primary_key=True)
     to_state: int = db.Column(db.Integer, primary_key=True)
 
-    message_json: dict = db.Column(postgresql.JSONB, nullable=False)
+    message_body: dict = db.Column(postgresql.JSONB, nullable=False)
     sender_id: int = db.Column(
         db.Integer, ForeignKey("character.character_id"), nullable=True)
 

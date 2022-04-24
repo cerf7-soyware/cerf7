@@ -4,11 +4,10 @@ from functools import wraps
 from sqlalchemy.exc import IntegrityError
 from cerf7.english_words import english_words_lower_list
 from cerf7.db import db, User
-from cerf7.storyline import user_bootstrap
+from cerf7.storyline import Storyline
 from flask import (
-    Blueprint, g, session, request, redirect, url_for, abort, flash
+    Blueprint, session, request, redirect, url_for, abort, flash
 )
-
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -21,8 +20,8 @@ def login():
     if user_passphrase is None:
         abort(400, "No authentication passphrase provided")
 
-    user = User.query\
-        .filter_by(passphrase=user_passphrase)\
+    user = User.query \
+        .filter_by(passphrase=user_passphrase) \
         .first()
     if user is None:
         flash(f"User with passphrase '{user_passphrase}' not found")
@@ -32,6 +31,12 @@ def login():
         session["user_id"] = user.user_id
         flash(f"Logged in with passphrase '{user_passphrase}'")
 
+    return redirect(url_for("vk.messages"))
+
+
+@bp.route("/logout", methods=["GET"])
+def logout():
+    session.clear()
     return redirect(url_for("vk.messages"))
 
 
@@ -47,26 +52,20 @@ def signup():
             user_passphrase = " ".join(random.choices(
                 english_words_lower_list, k=words_in_passphrase))
 
-            g.user = User(passphrase=user_passphrase)
-            db.session.add(g.user)
+            user = User(passphrase=user_passphrase)
+            db.session.add(user)
             db.session.commit()
 
             session.clear()
             session.permanent = True
-            session["user_id"] = g.user.user_id
+            session["user_id"] = user.user_id
 
-            user_bootstrap()
+            storyline = Storyline(user)
+            storyline.bootstrap()
 
             return redirect(url_for("vk.messages"))
         except IntegrityError:
             db.session.rollback()
-
-
-@bp.before_app_request
-def load_logged_in_user():
-    user_id = session.get("user_id")
-    if user_id is not None:
-        g.user = User.query.get(user_id)
 
 
 def login_required(view):
