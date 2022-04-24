@@ -21,6 +21,14 @@ socket.on("available-message", (message) => {
     // onAvailableMessage(message);
 });
 
+socket.on("main-character-offline", () => {
+    console.log("Main character is offline");
+});
+
+socket.on("main-character-back-online", () => {
+    console.log("Main character is back online");
+});
+
 // Log all messages for debugging purposes
 socket.on("message", (message) => {
     console.log("General purpose message from server: " + message);

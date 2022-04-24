@@ -72,5 +72,13 @@ def send_npc_message(whom: User, npc_message: DialogMessage):
         room=whom.current_sid)
 
 
+def send_offline(whom: User):
+    socketio.emit("main-character-offline", room=whom.current_sid)
+
+
+def send_back_online(whom: User):
+    socketio.emit("main-character-back-online", "{}", room=whom.current_sid)
+
+
 def init_app(app):
     socketio.init_app(app)

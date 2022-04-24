@@ -1,7 +1,9 @@
 from datetime import timedelta
-from cerf7.socketio import send_available_message, send_npc_message
 from cerf7.real_time_scheduling import RTSTask, schedule_task
 from cerf7.db import *
+from cerf7.socketio import (
+    send_available_message, send_npc_message, send_offline, send_back_online
+)
 
 
 class Storyline:
@@ -45,8 +47,10 @@ class Storyline:
         # push forward the plot.
         if event_type == EventType.MAIN_CHARACTER_OFFLINE:
             self.user.in_game_state.main_character_is_online = False
+            send_offline(self.user)
         elif event_type == EventType.MAIN_CHARACTER_BACK_ONLINE:
             self.user.in_game_state.main_character_is_online = True
+            send_back_online(self.user)
         elif event_type == EventType.ADD_CONVERSATION:
             event_to_dispatch = AddConversationEvent.query.get(event_id)
             conversation = ConversationHandle(
@@ -118,7 +122,7 @@ class ConversationHandle:
     @staticmethod
     def _message_time_shift(message: ConversationMessage) -> timedelta:
         # TODO: Calculate time shift using character's typing habits.
-        typing_speed_chars_per_min = 200
+        typing_speed_chars_per_min = 500
 
         text_len = len(message.message_body["text"])
         typing_time = text_len / typing_speed_chars_per_min
