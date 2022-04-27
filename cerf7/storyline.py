@@ -1,9 +1,8 @@
+import cerf7.socketio as socketio
+
 from datetime import timedelta
 from cerf7.real_time_scheduling import RTSTask, schedule_task
 from cerf7.db import *
-from cerf7.socketio import (
-    send_available_message, send_npc_message, send_offline, send_back_online
-)
 
 
 class Storyline:
@@ -47,10 +46,10 @@ class Storyline:
         # push forward the plot.
         if event_type == EventType.MAIN_CHARACTER_OFFLINE:
             self.user.in_game_state.main_character_is_online = False
-            send_offline(self.user)
+            socketio.send_offline(self.user)
         elif event_type == EventType.MAIN_CHARACTER_BACK_ONLINE:
             self.user.in_game_state.main_character_is_online = True
-            send_back_online(self.user)
+            socketio.send_back_online(self.user)
         elif event_type == EventType.ADD_CONVERSATION:
             event_to_dispatch = AddConversationEvent.query.get(event_id)
             conversation = ConversationHandle(
@@ -92,7 +91,7 @@ class ConversationHandle:
             # notifications # about them to client.
             for message in next_messages:
                 self.user.commit_available_message(message)
-                send_available_message(self.user, message)
+                socketio.send_available_message(self.user, message)
         else:
             # Schedule opponent's message in real time
 
@@ -104,7 +103,7 @@ class ConversationHandle:
                 conversation_state.conversation_state = npc_message.to_state
                 db.session.flush()
 
-                send_npc_message(self.user, message_instance)
+                socketio.send_npc_message(self.user, message_instance)
                 self.update()
 
             task = RTSTask(
@@ -112,8 +111,30 @@ class ConversationHandle:
                 [npc_message, conversation_state, self.conversation])
             schedule_task(task)
 
+    def follow_user_choice(self, from_state: int, to_state: int) -> None:
+        message = ConversationMessage.query.get(
+            (self.conversation.conversation_id, from_state, to_state))
+        conversation_state = self._get_conversation_state()
+
+        self.user.in_game_state.in_game_date_time += \
+            self._message_time_shift(message)
+        conversation_state.conversation_state = message.to_state
+        self.user.commit_message(message)
+
+        # TODO: Message expiration via scheduling.
+        messages_to_revoke = AvailableMessage.query.filter_by(
+            user_id=self.user.user_id,
+            conversation_id=self.conversation.conversation_id).all()
+        for message in messages_to_revoke:
+            socketio.send_message_expiration(self.user, message)
+            db.session.delete(message)
+        db.session.commit()
+
+        self.update()
+        print("Updated conversation")
+
     def _do_aftermath_scheduling(self) -> None:
-        pass
+        print("Aftermath scheduling")
 
     def _get_conversation_state(self) -> ConversationState:
         return ConversationState.query \
@@ -122,9 +143,9 @@ class ConversationHandle:
     @staticmethod
     def _message_time_shift(message: ConversationMessage) -> timedelta:
         # TODO: Calculate time shift using character's typing habits.
-        typing_speed_chars_per_min = 500
+        typing_speed_chars_per_min = 400
 
         text_len = len(message.message_body["text"])
         typing_time = text_len / typing_speed_chars_per_min
 
-        return timedelta(minutes=typing_time) + timedelta(seconds=0.3)
+        return timedelta(minutes=typing_time) + timedelta(seconds=0.1)

@@ -96,12 +96,13 @@ class UserInGameState(db.Model):
 
 
 # noinspection PyUnresolvedReferences
+@dataclass
 class AvailableMessage(db.Model):
-    user_id = db.Column(
+    user_id: int = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
-    conversation_id = db.Column(db.Integer, primary_key=True)
-    from_state = db.Column(db.Integer, primary_key=True)
-    to_state = db.Column(db.Integer, primary_key=True)
+    conversation_id: int = db.Column(db.Integer, primary_key=True)
+    from_state: int = db.Column(db.Integer, primary_key=True)
+    to_state: int = db.Column(db.Integer, primary_key=True)
 
     conversation_message = relationship("ConversationMessage", uselist=False)
 
@@ -170,7 +171,7 @@ class DialogMessage(db.Model):
 
     message_body: dict = db.Column(postgresql.JSONB, nullable=False)
     sent_date_time: str = db.Column(db.DateTime, nullable=False)
-    sender_id: int = db.Column(db.Integer, nullable=False)
+    sender_id: int = db.Column(db.Integer, nullable=True)
     is_read: bool = db.Column(db.Boolean, nullable=False, default=False)
     is_edited: bool = db.Column(db.Boolean, nullable=False, default=False)
 

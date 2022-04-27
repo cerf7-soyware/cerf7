@@ -25,7 +25,17 @@ VALUES (1, 4, 5, 1, '{"text": "Как плотность мысли этого �
 INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
 VALUES (1, 5, 6, NULL, '{"text": "Пока нахуй"}');
 INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
-VALUES (1, 5, 7, NULL, '{"text": "Глубоко"}');
+VALUES (1, 5, 10, NULL, '{"text": "Глубоко"}');
+
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 6, 7, 1, '{"text": "Ебать ты гнида конечно"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 7, 8, NULL, '{"text": "Ну я и че"}');
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 8, 9, 1, '{"text": "110 000"}');
+
+INSERT INTO conversation_message (conversation_id, from_state, to_state, sender_id, message_body)
+VALUES (1, 10, 11, 1, '{"text": "да я стебусь просто retard 00000"}');
 
 
 -- events

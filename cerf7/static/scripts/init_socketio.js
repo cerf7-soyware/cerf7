@@ -29,6 +29,10 @@ socket.on("main-character-back-online", () => {
     console.log("Main character is back online");
 });
 
+socket.on("message-expiration", (message) => {
+    console.log("Message expiration: " + message);
+});
+
 // Log all messages for debugging purposes
 socket.on("message", (message) => {
     console.log("General purpose message from server: " + message);

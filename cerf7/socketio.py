@@ -4,8 +4,11 @@ import json
 from dataclasses import asdict
 from functools import wraps
 from flask import current_app, g, session, request
-from flask_socketio import SocketIO, emit, send, disconnect
-from cerf7.db import db, User, ConversationMessage, DialogMessage
+from flask_socketio import SocketIO, send, disconnect
+import cerf7.storyline as storyline
+from cerf7.db import (
+    db, User, Conversation, ConversationMessage, DialogMessage, AvailableMessage
+)
 
 socketio = SocketIO()
 
@@ -45,6 +48,20 @@ def handle_disconnection():
     print("Disconnect handled")
 
 
+@socketio.on("user-message")
+@authenticated_only
+def handle_user_message(message_params):
+    print("Handling user message")
+    message_approved = AvailableMessage.query.get(
+        (g.user.user_id, message_params["conversation_id"],
+         message_params["from_state"], message_params["to_state"])) is not None
+    if message_approved:
+        conversation = Conversation.query.get(message_params["conversation_id"])
+        conversation_handle = storyline.ConversationHandle(g.user, conversation)
+        conversation_handle.follow_user_choice(
+            message_params["from_state"], message_params["to_state"])
+
+
 class DateTimeAwareJSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, datetime.datetime):
@@ -68,6 +85,15 @@ def send_npc_message(whom: User, npc_message: DialogMessage):
         "npc-message",
         json.dumps(
             asdict(npc_message), cls=DateTimeAwareJSONEncoder,
+            ensure_ascii=False),
+        room=whom.current_sid)
+
+
+def send_message_expiration(whom: User, expired_message: AvailableMessage):
+    socketio.emit(
+        "expired-message",
+        json.dumps(
+            asdict(expired_message), cls=DateTimeAwareJSONEncoder,
             ensure_ascii=False),
         room=whom.current_sid)
 
