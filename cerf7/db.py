@@ -8,11 +8,13 @@ from flask_sqlalchemy import SQLAlchemy
 from flask.cli import with_appcontext
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKey, ForeignKeyConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
+
 
 db = SQLAlchemy(
     engine_options={
         "json_serializer": partial(json.dumps, ensure_ascii=False)})
+
 
 # TODO: Separate dynamically updated relations (e.g. per-user scheduled events
 #  queue) from static data (structures defining the plot). Creating two
@@ -41,20 +43,26 @@ class User(db.Model):
     user_id = db.Column(db.Integer, primary_key=True)
     passphrase = db.Column(
         db.String(DEFAULT_MODEL_STRING_LENGTH), nullable=False, unique=True)
+
+    # SocketIO identifier
     current_sid = db.Column(db.String(SID_LENGTH), nullable=True, unique=True)
 
-    in_game_state = relationship("UserInGameState", uselist=False)
-    available_messages = relationship("AvailableMessage")
-    conversation_aftermath = relationship("ConversationAftermath")
+    # Real-time scheduling
+    rts_wanted_by = db.Column(db.Integer, nullable=False, default=0)
+    sync_point_irl = db.Column(db.DateTime, nullable=True)
+    sync_point_in_game = db.Column(db.DateTime, nullable=True)
+
+    in_game_state = relationship("InGameState", uselist=False)
     conversation_state = relationship("ConversationState")
     messages = relationship("DialogMessage")
     scheduled_events = relationship(
-        "ScheduledEvent", order_by="ScheduledEvent.publication_date_time")
+        "ScheduledEvent", order_by="ScheduledEvent.publication_datetime")
 
     def commit_new_conversation(self, conversation: "Conversation") -> None:
         conversation_state = ConversationState(
             user_id=self.user_id,
-            conversation_id=conversation.conversation_id)
+            conversation_id=conversation.conversation_id,
+            conversation_state=0)
         db.session.add(conversation_state)
         db.session.commit()
 
@@ -65,58 +73,21 @@ class User(db.Model):
 
         return message_instance
 
-    def commit_available_message(self, message: "ConversationMessage") -> None:
-        available_message = AvailableMessage(self, message)
-        db.session.add(available_message)
-        db.session.commit()
-
 
 # noinspection PyUnresolvedReferences
-class UserInGameState(db.Model):
+class InGameState(db.Model):
     user_id = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
 
-    in_game_date_time = db.Column(db.DateTime, nullable=False)
+    datetime = db.Column(db.DateTime, nullable=False)
     datastore = db.Column(postgresql.JSONB, nullable=False)
-    main_character_is_online = db.Column(
-        db.Boolean, nullable=False, default=False)
-    active_conversation_id = db.Column(
-        db.Integer, ForeignKey("conversation.conversation_id"), nullable=True)
+    is_online = db.Column(db.Boolean, nullable=False, default=False)
 
-    active_conversation = relationship(
-        "Conversation", uselist=False)
-
-    def __init__(self, user_id, initial_state: "InitialUserInGameState"):
-        self.user_id = user_id
-        self.in_game_date_time = initial_state.in_game_date_time
-        self.active_conversation_id = initial_state.active_conversation_id
-        self.active_conversation_state = initial_state.active_conversation_state
-        self.datastore = initial_state.datastore
-        self.main_character_is_online = initial_state.main_character_is_online
-
-
-# noinspection PyUnresolvedReferences
-@dataclass
-class AvailableMessage(db.Model):
-    user_id: int = db.Column(
-        db.Integer, ForeignKey("user.user_id"), primary_key=True)
-    conversation_id: int = db.Column(db.Integer, primary_key=True)
-    from_state: int = db.Column(db.Integer, primary_key=True)
-    to_state: int = db.Column(db.Integer, primary_key=True)
-
-    conversation_message = relationship("ConversationMessage", uselist=False)
-
-    __table_args__ = (ForeignKeyConstraint(
-        (conversation_id, from_state, to_state),
-        ("conversation_message.conversation_id",
-         "conversation_message.from_state",
-         "conversation_message.to_state")),)
-
-    def __init__(self, user: "User", message: "ConversationMessage"):
+    def __init__(self, user: "User", initial_state: "InitialInGameState"):
         self.user_id = user.user_id
-        self.conversation_id = message.conversation_id
-        self.from_state = message.from_state
-        self.to_state = message.to_state
+        self.datetime = initial_state.datetime
+        self.datastore = initial_state.datastore
+        self.is_online = initial_state.is_online
 
 
 # noinspection PyUnresolvedReferences
@@ -127,18 +98,7 @@ class ConversationState(db.Model):
         db.Integer, ForeignKey("conversation.conversation_id"),
         primary_key=True)
 
-    conversation_state = db.Column(db.Integer, nullable=False, default=0)
-
-
-# noinspection PyUnresolvedReferences
-class ConversationAftermath(db.Model):
-    user_id = db.Column(
-        db.Integer, ForeignKey("user.user_id"), primary_key=True)
-    conversation_id = db.Column(
-        db.Integer, ForeignKey("conversation.conversation_id"),
-        primary_key=True)
-
-    ending_state = db.Column(db.Integer, nullable=False)
+    conversation_state = db.Column(db.Integer, nullable=False)
 
 
 # noinspection PyUnresolvedReferences
@@ -146,14 +106,11 @@ class ScheduledEvent(db.Model):
     user_id = db.Column(
         db.Integer, ForeignKey("user.user_id"), primary_key=True)
     event_id = db.Column(
-        db.Integer, ForeignKey("event.event_id"), primary_key=True)
+        db.Integer, ForeignKey("event_reference.event_id"), primary_key=True)
 
-    publication_date_time = db.Column(db.DateTime)
+    publication_datetime = db.Column(db.DateTime)
 
-    # There is no relationship `event` but only `event_type` because
-    # information about events of different types is stored in separate
-    # relations.
-    event = relationship("Event", uselist=False)
+    event_reference = relationship("EventReference", uselist=False)
 
 
 # noinspection PyUnresolvedReferences
@@ -170,7 +127,7 @@ class DialogMessage(db.Model):
         db.Integer, primary_key=True, autoincrement=True)
 
     message_body: dict = db.Column(postgresql.JSONB, nullable=False)
-    sent_date_time: str = db.Column(db.DateTime, nullable=False)
+    sent_datetime: str = db.Column(db.DateTime, nullable=False)
     sender_id: int = db.Column(db.Integer, nullable=True)
     is_read: bool = db.Column(db.Boolean, nullable=False, default=False)
     is_edited: bool = db.Column(db.Boolean, nullable=False, default=False)
@@ -182,7 +139,7 @@ class DialogMessage(db.Model):
         self.user_id = user.user_id
         self.opponent_id = conversation_message.conversation.opponent_id
         self.message_body = conversation_message.message_body
-        self.sent_date_time = user.in_game_state.in_game_date_time
+        self.sent_datetime = user.in_game_state.datetime
         self.sender_id = conversation_message.sender_id
 
 
@@ -191,16 +148,16 @@ class DialogMessage(db.Model):
 ################################################################################
 
 # noinspection PyUnresolvedReferences
-class InitialUserInGameState(db.Model):
+class InitialInGameState(db.Model):
     # For ep0, only one initial state of the game world exists.
     # In further episodes, user might start from different initial states
     # depending on the previous episode ending.
     initial_state_id = db.Column(db.Integer, primary_key=True)
 
-    in_game_date_time = db.Column(db.DateTime, nullable=False)
+    datetime = db.Column(db.DateTime, nullable=False)
     active_conversation_state = db.Column(db.Integer, nullable=True)
     datastore = db.Column(postgresql.JSONB, nullable=False)
-    main_character_is_online = db.Column(
+    is_online = db.Column(
         db.Boolean, nullable=False, default=False)
     active_conversation_id = db.Column(
         db.Integer, ForeignKey("conversation.conversation_id"), nullable=True)
@@ -249,7 +206,7 @@ class PrePlotDialogMessage(db.Model):
     message_id = db.Column(db.Integer, primary_key=True)
 
     message_body = db.Column(postgresql.JSONB, nullable=False)
-    sent_date_time = db.Column(db.DateTime, nullable=False)
+    sent_datetime = db.Column(db.DateTime, nullable=False)
     sender_id = db.Column(db.Integer, nullable=False)
     is_read = db.Column(db.Boolean, nullable=False)
     is_edited = db.Column(db.Boolean, nullable=False)
@@ -295,22 +252,32 @@ class ConversationMessage(db.Model):
 
 @unique
 class EventType(Enum):
-    ADD_CONVERSATION = auto()
+    NEW_CONVERSATION = auto()
+    NPC_MESSAGE = auto()
     SCHEDULED_EVENT_EXPIRATION = auto()
     MAIN_CHARACTER_OFFLINE = auto()
     MAIN_CHARACTER_BACK_ONLINE = auto()
 
 
+@unique
+class RTSAttitude(Enum):
+    WANTS = auto()
+    REVOKES = auto()
+    NEUTRAL = auto()
+
+
 # noinspection PyUnresolvedReferences
-class Event(db.Model):
+class EventReference(db.Model):
     event_id = db.Column(db.Integer, primary_key=True)
     event_type = db.Column(db.Enum(EventType), nullable=False)
+    rts_attitude = db.Column(
+        db.Enum(RTSAttitude), nullable=False, server_default="NEUTRAL")
 
 
 # noinspection PyUnresolvedReferences
-class AddConversationEvent(db.Model):
+class NewConversationEvent(db.Model):
     event_id = db.Column(
-        db.Integer, ForeignKey("event.event_id"), primary_key=True)
+        db.Integer, ForeignKey("event_reference.event_id"), primary_key=True)
     conversation_id = db.Column(
         db.Integer, ForeignKey("conversation.conversation_id"))
 
@@ -318,10 +285,32 @@ class AddConversationEvent(db.Model):
 
 
 # noinspection PyUnresolvedReferences
+class NPCMessageEvent(db.Model):
+    event_id = db.Column(
+        db.Integer, ForeignKey("event_reference.event_id"), primary_key=True)
+
+    conversation_id: int = db.Column(db.Integer)
+    from_state: int = db.Column(db.Integer)
+    to_state: int = db.Column(db.Integer)
+
+    event_reference = relationship("EventReference", uselist=False)
+    conversation_message = relationship(
+        "ConversationMessage", uselist=False,
+        backref=backref("npc_message_event", uselist=False))
+
+    __table_args__ = [ForeignKeyConstraint(
+        (conversation_id, from_state, to_state),
+        ("conversation_message.conversation_id",
+         "conversation_message.from_state",
+         "conversation_message.to_state"))]
+
+
+# noinspection PyUnresolvedReferences
 class ScheduledEventExpiration(db.Model):
     event_id = db.Column(
-        db.Integer, ForeignKey("event.event_id"), primary_key=True)
-    expired_event_id = db.Column(db.Integer, ForeignKey("event.event_id"))
+        db.Integer, ForeignKey("event_reference.event_id"), primary_key=True)
+    expired_event_id = db.Column(
+        db.Integer, ForeignKey("event_reference.event_id"))
 
 
 ################################################################################
@@ -332,9 +321,9 @@ class InitialScheduling(db.Model):
 
     # Here are the events that need to be scheduled before the story starts.
     # E.g. the first conversation in the story needs to be scheduled from here.
-    event_date_time = db.Column(db.DateTime, nullable=False)
+    event_datetime = db.Column(db.DateTime, nullable=False)
     event_id = db.Column(
-        db.Integer, ForeignKey("event.event_id"), nullable=False)
+        db.Integer, ForeignKey("event_reference.event_id"), nullable=False)
 
 
 # noinspection PyUnresolvedReferences
@@ -355,11 +344,11 @@ class AftermathScheduling(db.Model):
     ending_state = db.Column(db.Integer, primary_key=True)
 
     event_id = db.Column(
-        db.Integer, ForeignKey("event.event_id"), nullable=False)
-    event_date_time = db.Column(db.Integer, nullable=False)
+        db.Integer, ForeignKey("event_reference.event_id"), nullable=False)
+    event_datetime = db.Column(db.Integer, nullable=False)
     datastore_predicate = db.Column(db.Text, nullable=False, default="True")
 
-    event = relationship("Event", uselist=False)
+    event_reference = relationship("EventReference", uselist=False)
 
 
 ################################################################################

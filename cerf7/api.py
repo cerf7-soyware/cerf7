@@ -10,6 +10,6 @@ def get_user_chats():
     pass
 
 
-@bp.route("load_chat_messages", methods=["POST"])
+@bp.route("/load_chat_messages", methods=["POST"])
 def load_chat_messages():
     pass

@@ -1,7 +1,8 @@
 import cerf7.socketio as socketio
+import cerf7.rts as rts
+import cerf7.dispatch as dispatch
 
-from datetime import timedelta
-from cerf7.real_time_scheduling import RTSTask, schedule_task
+from datetime import datetime, timedelta
 from cerf7.db import *
 
 
@@ -10,142 +11,63 @@ class Storyline:
         self.user = user
 
     def bootstrap(self) -> None:
-        initial_state = InitialUserInGameState.query.first()
-        user_state = UserInGameState(self.user.user_id, initial_state)
+        initial_state = InitialInGameState.query.first()
+        user_state = InGameState(self.user, initial_state)
         db.session.add(user_state)
 
         for scheduling_precept in InitialScheduling.query.all():
-            event = ScheduledEvent(
+            scheduled_event = ScheduledEvent(
                 user_id=self.user.user_id,
                 event_id=scheduling_precept.event_id,
-                publication_date_time=scheduling_precept.event_date_time)
-            db.session.add(event)
+                publication_datetime=scheduling_precept.event_datetime)
+            db.session.add(scheduled_event)
 
         db.session.commit()
         self.fastforward()
 
     def fastforward(self) -> None:
-        # Shift time to the earliest scheduled event and dispatch it
-        # scheduled_event = user.scheduledEvents.pop()
+        self.dispatch_next_event()
+        while not self.user.in_game_state.is_online:
+            self.dispatch_next_event()
+
+    def dispatch_next_event(self) -> None:
         scheduled_event = self.user.scheduled_events[0]
-        self.dispatch_scheduled_event(scheduled_event)
 
-        # Keep dispatching in-game events until main character is back online
-        while not self.user.in_game_state.main_character_is_online:
-            scheduled_event = self.user.scheduled_events[0]
-            self.dispatch_scheduled_event(scheduled_event)
+        self.time_travel_to(scheduled_event.publication_datetime)
+        self.satisfy_rts_attitude(scheduled_event.event_reference.rts_attitude)
 
-    def dispatch_scheduled_event(self, scheduled_event: ScheduledEvent) -> None:
-        self.user.in_game_state.in_game_date_time = \
-            scheduled_event.publication_date_time
-
-        event_type = scheduled_event.event.event_type
-        event_id = scheduled_event.event.event_id
-
-        # Grab event information from events table depending on `event_type` and
-        # push forward the plot.
-        if event_type == EventType.MAIN_CHARACTER_OFFLINE:
-            self.user.in_game_state.main_character_is_online = False
-            socketio.send_offline(self.user)
-        elif event_type == EventType.MAIN_CHARACTER_BACK_ONLINE:
-            self.user.in_game_state.main_character_is_online = True
-            socketio.send_back_online(self.user)
-        elif event_type == EventType.ADD_CONVERSATION:
-            event_to_dispatch = AddConversationEvent.query.get(event_id)
-            conversation = ConversationHandle(
-                self.user, event_to_dispatch.conversation)
-            conversation.commit()
-            conversation.update()
-        elif event_type == EventType.SHEDULED_EVENT_EXPIRATION:
-            event_to_dispatch = ScheduledEventExpiration.get(event_id)
-            expired_event = ScheduledEvent.query.get(
-                (self.user.user_id, event_to_dispatch.expired_event_id))
-            expired_event.delete()
+        event_type = scheduled_event.event_reference.event_type
+        dispatcher_cls = dispatch.by_type[event_type]
+        dispatcher = dispatcher_cls(self.user, scheduled_event.event_reference)
+        dispatcher.dispatch()
 
         db.session.delete(scheduled_event)
         db.session.commit()
 
+        continue_dispatching = \
+            self.user.rts_wanted_by > 0 and \
+            self.user.in_game_state.is_online
+        if continue_dispatching:
+            rts.schedule_event_dispatch(self.user)
 
-class ConversationHandle:
-    def __init__(self, user: User, conversation: Conversation):
-        self.user = user
-        self.conversation = conversation
+    def time_travel_to(self, destination: datetime):
+        self.user.in_game_state.datetime = destination
+        socketio.send_time_travel(self.user)
 
-    def commit(self) -> None:
-        self.user.commit_new_conversation(self.conversation)
+    def time_travel_by(self, interval: timedelta):
+        self.time_travel_to(self.user.in_game_state.datetime + interval)
 
-    def update(self) -> None:
-        conversation_state = self._get_conversation_state()
-        next_messages = ConversationMessage.query \
-            .filter_by(
-                conversation_id=self.conversation.conversation_id,
-                from_state=conversation_state.conversation_state).all()
-
-        if not next_messages:
-            # Since there are no more messages, the conversation has ended.
-            # For now, it's time for aftermath scheduling.
-            self._do_aftermath_scheduling()
-        elif next_messages[0].sender_id is None:
-            # Now it is main character's turn to say something.
-            # We commit available message options in the DB and send
-            # notifications # about them to client.
-            for message in next_messages:
-                self.user.commit_available_message(message)
-                socketio.send_available_message(self.user, message)
-        else:
-            # Schedule opponent's message in real time
-
-            npc_message = next_messages[0]
-            typing_time = self._message_time_shift(npc_message)
-
-            def action():
-                message_instance = self.user.commit_message(npc_message)
-                conversation_state.conversation_state = npc_message.to_state
-                db.session.flush()
-
-                socketio.send_npc_message(self.user, message_instance)
-                self.update()
-
-            task = RTSTask(
-                self.user, "npc-message", action, typing_time,
-                [npc_message, conversation_state, self.conversation])
-            schedule_task(task)
-
-    def follow_user_choice(self, from_state: int, to_state: int) -> None:
-        message = ConversationMessage.query.get(
-            (self.conversation.conversation_id, from_state, to_state))
-        conversation_state = self._get_conversation_state()
-
-        self.user.in_game_state.in_game_date_time += \
-            self._message_time_shift(message)
-        conversation_state.conversation_state = message.to_state
-        self.user.commit_message(message)
-
-        # TODO: Message expiration via scheduling.
-        messages_to_revoke = AvailableMessage.query.filter_by(
-            user_id=self.user.user_id,
-            conversation_id=self.conversation.conversation_id).all()
-        for message in messages_to_revoke:
-            socketio.send_message_expiration(self.user, message)
-            db.session.delete(message)
-        db.session.commit()
-
-        self.update()
-        print("Updated conversation")
-
-    def _do_aftermath_scheduling(self) -> None:
-        print("Aftermath scheduling")
-
-    def _get_conversation_state(self) -> ConversationState:
-        return ConversationState.query \
-            .get((self.user.user_id, self.conversation.conversation_id))
-
-    @staticmethod
-    def _message_time_shift(message: ConversationMessage) -> timedelta:
-        # TODO: Calculate time shift using character's typing habits.
-        typing_speed_chars_per_min = 400
-
-        text_len = len(message.message_body["text"])
-        typing_time = text_len / typing_speed_chars_per_min
-
-        return timedelta(minutes=typing_time) + timedelta(seconds=0.1)
+    def satisfy_rts_attitude(self, rts_attitude: RTSAttitude) -> None:
+        if rts_attitude == RTSAttitude.WANTS:
+            self.user.rts_wanted_by += 1
+            if self.user.rts_wanted_by == 1:
+                # This event is the first in series that wants RTS.
+                # We need to create a new sync point.
+                self.user.sync_point_irl = datetime.now()
+                self.user.sync_point_in_game = self.user.in_game_state.datetime
+        elif rts_attitude == RTSAttitude.REVOKES:
+            self.user.rts_wanted_by -= 1
+            if self.user.rts_wanted_by == 0:
+                # Remove last stored sync point.
+                self.user.sync_point_irl = None
+                self.user.sync_point_in_game = None

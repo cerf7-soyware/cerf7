@@ -1,14 +1,11 @@
-import datetime
 import json
 
 from dataclasses import asdict
 from functools import wraps
 from flask import current_app, g, session, request
 from flask_socketio import SocketIO, send, disconnect
-import cerf7.storyline as storyline
-from cerf7.db import (
-    db, User, Conversation, ConversationMessage, DialogMessage, AvailableMessage
-)
+from cerf7.db import User, ConversationMessage, DialogMessage
+
 
 socketio = SocketIO()
 
@@ -36,65 +33,34 @@ def handle_message(data):
 @authenticated_only
 def handle_connection():
     g.user.current_sid = request.sid
-    db.session.flush()
-
-    print("New connection")
-
+    current_app.logger.debug("New SocketIO connection")
     send(f"Greetings! Your passphrase is {g.user.passphrase}")
 
 
 @socketio.on("disconnect")
 def handle_disconnection():
-    print("Disconnect handled")
+    current_app.logger.debug("SocketIO disconnection")
 
 
 @socketio.on("user-message")
 @authenticated_only
 def handle_user_message(message_params):
-    print("Handling user message")
-    message_approved = AvailableMessage.query.get(
-        (g.user.user_id, message_params["conversation_id"],
-         message_params["from_state"], message_params["to_state"])) is not None
-    if message_approved:
-        conversation = Conversation.query.get(message_params["conversation_id"])
-        conversation_handle = storyline.ConversationHandle(g.user, conversation)
-        conversation_handle.follow_user_choice(
-            message_params["from_state"], message_params["to_state"])
-
-
-class DateTimeAwareJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, datetime.datetime):
-            return o.timestamp()
-
-        return json.JSONEncoder.default(self, o)
+    current_app.logger.debug("Handling user message")
+    raise NotImplementedError()
 
 
 def send_available_message(
         whom: User, main_character_message: ConversationMessage):
     socketio.emit(
         "available-message",
-        json.dumps(
-            asdict(main_character_message), cls=DateTimeAwareJSONEncoder,
-            ensure_ascii=False),
+        json.dumps(asdict(main_character_message), ensure_ascii=False),
         room=whom.current_sid)
 
 
 def send_npc_message(whom: User, npc_message: DialogMessage):
     socketio.emit(
         "npc-message",
-        json.dumps(
-            asdict(npc_message), cls=DateTimeAwareJSONEncoder,
-            ensure_ascii=False),
-        room=whom.current_sid)
-
-
-def send_message_expiration(whom: User, expired_message: AvailableMessage):
-    socketio.emit(
-        "expired-message",
-        json.dumps(
-            asdict(expired_message), cls=DateTimeAwareJSONEncoder,
-            ensure_ascii=False),
+        json.dumps(asdict(npc_message), ensure_ascii=False),
         room=whom.current_sid)
 
 
@@ -104,6 +70,12 @@ def send_offline(whom: User):
 
 def send_back_online(whom: User):
     socketio.emit("main-character-back-online", "{}", room=whom.current_sid)
+
+
+def send_time_travel(whom: User):
+    socketio.emit(
+        "time-travel", str(whom.in_game_state.datetime),
+        room=whom.current_sid)
 
 
 def init_app(app):
